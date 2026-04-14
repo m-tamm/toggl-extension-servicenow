@@ -36,6 +36,21 @@ The import target is defined in `popup.js`:
 
 - `DEFAULT_IMPORT_INPUT_ID = "task_time_worked.u_from"`
 
+## 3.1) Tag Mapping For Rate Type
+
+The extension maps Toggl tags to ServiceNow rate selections.
+
+Implemented example mapping in `popup.js`:
+
+- `admin` -> rate type `administrative`, category `administrative Tätigkeiten`
+- `train` -> rate type `administrative`, category `Ausbildung`
+- `meet` -> rate type `administrative`, category `Fachspezifische Meetings`
+- `learn` -> rate type `administrative`, category `Weiterbildung`
+- `code` -> rate type `business solution`, category `Business Solution`
+- `dev` -> rate type `business solution`, category `Business Solution`
+
+If multiple tags are present, the first matching tag wins.
+
 Change this to your real internal field id once known.
 
 ## 4) Optional CLI test (already verified)

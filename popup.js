@@ -10,6 +10,31 @@ const DURATION_HOURS_INPUT_ID = "ni.task_time_worked.time_workeddur_hour";
 const DURATION_MINUTES_INPUT_ID = "ni.task_time_worked.time_workeddur_min";
 const DURATION_SECONDS_INPUT_ID = "ni.task_time_worked.time_workeddur_sec";
 const EXTERNAL_NOTE_TEXTAREA_ID = "task_time_worked.u_time_booking_external_note";
+const RATE_TYPE_SELECT_ID = "sys_select.task_time_worked.rate_type";
+const RATE_CATEGORY_SELECT_ID = "task_time_worked.u_rate_type_category";
+
+const RATE_TYPE_VALUES = {
+  administrative: "43007796db2c41108e647806f4961932",
+  businessSolution: "40407b96db2c41108e647806f496192b"
+};
+
+const RATE_CATEGORY_VALUES = {
+  administrative: "administrative Tätigkeiten",
+  trainingColleagues: "Ausbildung",
+  meetings: "Fachspezifische Meetings",
+  learning: "Weiterbildung",
+  businessSolution: "Business Solution"
+};
+
+// Example mapping: short Toggl tags -> ServiceNow category.
+const TAG_TO_CATEGORY = {
+  admin: RATE_CATEGORY_VALUES.administrative,
+  train: RATE_CATEGORY_VALUES.trainingColleagues,
+  meet: RATE_CATEGORY_VALUES.meetings,
+  learn: RATE_CATEGORY_VALUES.learning,
+  code: RATE_CATEGORY_VALUES.businessSolution,
+  dev: RATE_CATEGORY_VALUES.businessSolution
+};
 
 const ui = {
   tokenSection: document.getElementById("token-section"),
@@ -77,11 +102,38 @@ function normalizeEntries(rawEntries, targetDate, timeZone) {
       start: entry.start,
       stop: entry.stop,
       duration: entry.duration,
+      tags: Array.isArray(entry.tags) ? entry.tags : [],
       projectId: entry.project_id || null,
       importDuration: durationToParts(entry.duration, entry.start, entry.stop),
       importTitle: entry.description || "",
+      importRateSelection: resolveRateSelection(entry.tags),
       importDateValue: formatForTargetInput(entry.start, timeZone)
     }));
+}
+
+function resolveRateSelection(rawTags) {
+  const tags = (Array.isArray(rawTags) ? rawTags : [])
+    .filter((t) => typeof t === "string")
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
+
+  for (const tag of tags) {
+    const categoryValue = TAG_TO_CATEGORY[tag];
+    if (!categoryValue) continue;
+
+    const rateTypeValue =
+      categoryValue === RATE_CATEGORY_VALUES.businessSolution
+        ? RATE_TYPE_VALUES.businessSolution
+        : RATE_TYPE_VALUES.administrative;
+
+    return {
+      matchedTag: tag,
+      rateTypeValue,
+      categoryValue
+    };
+  }
+
+  return null;
 }
 
 function durationToParts(durationSeconds, startIso, stopIso) {
@@ -108,7 +160,8 @@ function durationToParts(durationSeconds, startIso, stopIso) {
 function formatEntryLine(entry) {
   const stop = entry.stop || "running";
   const project = entry.projectId ? `project:${entry.projectId}` : "project:-";
-  return `${entry.start} -> ${stop} | ${entry.duration}s | ${project}`;
+  const tags = entry.tags?.length ? ` | tags:${entry.tags.join(",")}` : "";
+  return `${entry.start} -> ${stop} | ${entry.duration}s | ${project}${tags}`;
 }
 
 function isCacheValid(cache) {
@@ -274,9 +327,11 @@ async function importEntryToActiveTab(entry) {
         ? entry.importTitle
         : entry.description || "";
 
+    const safeRateSelection = entry.importRateSelection || resolveRateSelection(entry.tags);
+
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id, allFrames: true },
-      func: (
+      func: async (
         dateValue,
         inputId,
         targetFrameId,
@@ -285,7 +340,10 @@ async function importEntryToActiveTab(entry) {
         secondsId,
         noteId,
         duration,
-        title
+        title,
+        rateTypeId,
+        rateCategoryId,
+        rateSelection
       ) => {
         const frameElement = window.frameElement;
         const currentFrameId = frameElement?.id || "";
@@ -310,6 +368,34 @@ async function importEntryToActiveTab(entry) {
           el.dispatchEvent(new Event("input", { bubbles: true }));
           el.dispatchEvent(new Event("change", { bubbles: true }));
           el.dispatchEvent(new Event("blur", { bubbles: true }));
+        };
+
+        const setSelectValue = (selectEl, wantedValue) => {
+          const options = Array.from(selectEl.options || []);
+          const wanted = String(wantedValue ?? "").trim().toLowerCase();
+          const directMatch = options.find((opt) => String(opt.value).trim().toLowerCase() === wanted);
+          const textMatch = options.find((opt) => String(opt.textContent).trim().toLowerCase() === wanted);
+          const matched = directMatch || textMatch;
+          if (!matched) {
+            return false;
+          }
+
+          selectEl.value = matched.value;
+          selectEl.dispatchEvent(new Event("input", { bubbles: true }));
+          selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+          selectEl.dispatchEvent(new Event("blur", { bubbles: true }));
+          return true;
+        };
+
+        const waitForCategoryOption = async (selectEl, wantedValue, timeoutMs = 2000) => {
+          const started = Date.now();
+          while (Date.now() - started < timeoutMs) {
+            if (setSelectValue(selectEl, wantedValue)) {
+              return true;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+          return false;
         };
 
         const writtenIds = [];
@@ -354,6 +440,33 @@ async function importEntryToActiveTab(entry) {
           writtenIds.push(noteField.id);
         }
 
+        if (rateSelection?.rateTypeValue && rateSelection?.categoryValue) {
+          const rateTypeSelect = document.getElementById(rateTypeId);
+          const rateCategorySelect = document.getElementById(rateCategoryId);
+
+          if (!rateTypeSelect || !(rateTypeSelect instanceof HTMLSelectElement)) {
+            missingIds.push(rateTypeId);
+          } else {
+            const setTypeOk = setSelectValue(rateTypeSelect, rateSelection.rateTypeValue);
+            if (!setTypeOk) {
+              missingIds.push(`${rateTypeId}:option(${rateSelection.rateTypeValue})`);
+            } else {
+              writtenIds.push(rateTypeSelect.id);
+            }
+          }
+
+          if (!rateCategorySelect || !(rateCategorySelect instanceof HTMLSelectElement)) {
+            missingIds.push(rateCategoryId);
+          } else {
+            const setCategoryOk = await waitForCategoryOption(rateCategorySelect, rateSelection.categoryValue);
+            if (!setCategoryOk) {
+              missingIds.push(`${rateCategoryId}:option(${rateSelection.categoryValue})`);
+            } else {
+              writtenIds.push(rateCategorySelect.id);
+            }
+          }
+        }
+
         if (!writtenIds.length) {
           return {
             ok: false,
@@ -377,7 +490,10 @@ async function importEntryToActiveTab(entry) {
         DURATION_SECONDS_INPUT_ID,
         EXTERNAL_NOTE_TEXTAREA_ID,
         safeDuration,
-        safeTitle
+        safeTitle,
+        RATE_TYPE_SELECT_ID,
+        RATE_CATEGORY_SELECT_ID,
+        safeRateSelection
       ]
     });
 
@@ -394,7 +510,10 @@ async function importEntryToActiveTab(entry) {
       success.result.missingIds?.length > 0
         ? ` Missing fields: ${success.result.missingIds.join(", ")}.`
         : "";
-    showStatus(`Imported ${entry.importDateValue} into ${ids}${frameInfo}.${missingInfo}`);
+    const rateInfo = safeRateSelection
+      ? ` Rate by tag '${safeRateSelection.matchedTag}' -> '${safeRateSelection.categoryValue}'.`
+      : " No matching tag for rate mapping.";
+    showStatus(`Imported ${entry.importDateValue} into ${ids}${frameInfo}.${missingInfo}${rateInfo}`);
   } catch (error) {
     showStatus(`Import failed: ${error.message}`, true);
   }
