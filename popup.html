@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Toggl Import</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Toggl Import</h1>
+
+      <section id="token-section" class="card">
+        <h2>Setup</h2>
+        <label for="api-token">Toggl API Token</label>
+        <input id="api-token" type="password" placeholder="Paste token" autocomplete="off" />
+        <div class="row">
+          <button id="save-token" type="button">Save Token</button>
+          <button id="clear-token" type="button" class="danger">Clear Token</button>
+        </div>
+      </section>
+
+      <section id="data-section" class="card hidden">
+        <h2>Fetch Entries</h2>
+        <label for="target-date">Date</label>
+        <input id="target-date" type="date" />
+        <div class="row">
+          <button id="fetch-entries" type="button">Fetch From Toggl</button>
+          <button id="clear-cache" type="button">Clear Cached Day</button>
+        </div>
+
+        <p id="cache-info" class="muted"></p>
+
+        <ul id="entries" class="entries"></ul>
+      </section>
+
+      <p id="status" class="status" aria-live="polite"></p>
+    </main>
+
+    <script src="popup.js" type="module"></script>
+  </body>
+</html>

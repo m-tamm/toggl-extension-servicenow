@@ -1,0 +1,131 @@
+:root {
+  color-scheme: light;
+  --bg: #f6f7fb;
+  --card: #ffffff;
+  --ink: #1f2430;
+  --muted: #5e6677;
+  --line: #d7dbe5;
+  --action: #1558d6;
+  --action-ink: #ffffff;
+  --danger: #b42318;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: linear-gradient(180deg, #eef3ff 0%, var(--bg) 100%);
+  color: var(--ink);
+  font: 13px/1.4 "Segoe UI", sans-serif;
+}
+
+.container {
+  width: 360px;
+  padding: 12px;
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+h2 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+
+label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 8px;
+  margin-bottom: 8px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 9px;
+  background: var(--action);
+  color: var(--action-ink);
+  cursor: pointer;
+}
+
+button.danger {
+  background: var(--danger);
+}
+
+button.secondary {
+  background: #334155;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hidden {
+  display: none;
+}
+
+.entries {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.entry-item {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.entry-meta {
+  margin: 0 0 6px;
+  font-size: 12px;
+}
+
+.entry-title {
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+
+.muted {
+  color: var(--muted);
+  margin: 8px 0 0;
+}
+
+.status {
+  min-height: 18px;
+  margin: 6px 2px 0;
+  color: #0f5132;
+}
+
+.status.error {
+  color: #842029;
+}
