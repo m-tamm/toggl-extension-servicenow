@@ -129,6 +129,26 @@ button:disabled {
 .entry-title {
   margin: 0 0 6px;
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.import-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  flex: 0 0 auto;
+}
+
+.import-dot.not-imported {
+  background: #dc2626;
+}
+
+.import-dot.imported {
+  background: #16a34a;
 }
 
 .entry-project {

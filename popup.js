@@ -51,6 +51,8 @@ const ui = {
   status: document.getElementById("status")
 };
 
+let currentEntries = [];
+
 function showStatus(message, isError = false) {
   ui.status.textContent = message;
   ui.status.classList.toggle("error", isError);
@@ -105,11 +107,32 @@ function normalizeEntries(rawEntries, targetDate, timeZone) {
       duration: entry.duration,
       tags: Array.isArray(entry.tags) ? entry.tags : [],
       projectId: entry.project_id || null,
+      imported: false,
       importDuration: durationToParts(entry.duration, entry.start, entry.stop),
       importTitle: entry.description || "",
       importRateSelection: resolveRateSelection(entry.tags),
       importDateValue: formatForTargetInput(entry.start, timeZone)
     }));
+}
+
+function getEntryKey(entry) {
+  if (entry?.id !== undefined && entry?.id !== null) {
+    return `id:${entry.id}`;
+  }
+  return `fallback:${entry?.start || ""}:${entry?.description || ""}:${entry?.duration || ""}`;
+}
+
+function preserveImportedFlags(newEntries, oldEntries) {
+  const importedKeys = new Set(
+    (oldEntries || [])
+      .filter((entry) => Boolean(entry?.imported))
+      .map((entry) => getEntryKey(entry))
+  );
+
+  return newEntries.map((entry) => ({
+    ...entry,
+    imported: importedKeys.has(getEntryKey(entry))
+  }));
 }
 
 function normalizeEntriesWithProjects(rawEntries, targetDate, timeZone, projectMap) {
@@ -262,7 +285,55 @@ async function clearCache() {
   await chrome.storage.local.remove(STORAGE_KEYS.cache);
 }
 
+function setEntryImportedInCurrentList(entryToMark) {
+  const keyToMark = getEntryKey(entryToMark);
+  currentEntries = currentEntries.map((entry) => {
+    if (getEntryKey(entry) !== keyToMark) {
+      return entry;
+    }
+    return {
+      ...entry,
+      imported: true
+    };
+  });
+  renderEntries(currentEntries);
+}
+
+async function markImportedInCacheByKey(keyToMark) {
+  const { [STORAGE_KEYS.cache]: cache } = await getStorage([STORAGE_KEYS.cache]);
+  if (!cache || !Array.isArray(cache.entries)) {
+    return;
+  }
+
+  let changed = false;
+  const updatedEntries = cache.entries.map((entry) => {
+    if (getEntryKey(entry) !== keyToMark) {
+      return entry;
+    }
+    if (entry.imported) {
+      return entry;
+    }
+    changed = true;
+    return {
+      ...entry,
+      imported: true
+    };
+  });
+
+  if (!changed) {
+    return;
+  }
+
+  await setStorage({
+    [STORAGE_KEYS.cache]: {
+      ...cache,
+      entries: updatedEntries
+    }
+  });
+}
+
 function renderEntries(entries) {
+  currentEntries = entries;
   ui.entries.innerHTML = "";
 
   if (!entries.length) {
@@ -279,7 +350,14 @@ function renderEntries(entries) {
 
     const title = document.createElement("p");
     title.className = "entry-title";
-    title.textContent = entry.description;
+
+    const importDot = document.createElement("span");
+    importDot.className = `import-dot ${entry.imported ? "imported" : "not-imported"}`;
+
+    const titleText = document.createElement("span");
+    titleText.textContent = entry.description;
+
+    title.append(importDot, titleText);
 
     const project = document.createElement("p");
     project.className = "entry-project";
@@ -303,7 +381,15 @@ function renderEntries(entries) {
     button.type = "button";
     button.className = "secondary";
     button.textContent = `Import ${entry.importDateValue}`;
-    button.addEventListener("click", () => importEntryToActiveTab(entry));
+    button.addEventListener("click", () => {
+      const entryKey = getEntryKey(entry);
+      // Optimistic imported flag update: popup can close before async continuation runs.
+      setEntryImportedInCurrentList(entry);
+      markImportedInCacheByKey(entryKey)
+        .catch(() => {});
+
+      importEntryToActiveTab(entry);
+    });
 
     li.append(title, project, meta, button);
     ui.entries.appendChild(li);
@@ -391,7 +477,10 @@ async function fetchEntriesForDate() {
 
   const rawEntries = await response.json();
   const projectMap = await fetchProjectsForEntries(token, rawEntries);
-  const entries = normalizeEntriesWithProjects(rawEntries, targetDate, timezone, projectMap);
+  const normalizedEntries = normalizeEntriesWithProjects(rawEntries, targetDate, timezone, projectMap);
+  const entries = cache && cache.date === targetDate
+    ? preserveImportedFlags(normalizedEntries, cache.entries)
+    : normalizedEntries;
 
   const newCache = {
     date: targetDate,
@@ -613,6 +702,7 @@ async function importEntryToActiveTab(entry) {
     const rateInfo = safeRateSelection
       ? ` Rate by tag '${safeRateSelection.matchedTag}' -> '${safeRateSelection.categoryValue}'.`
       : " No matching tag for rate mapping.";
+
     showStatus(`Imported ${entry.importDateValue} into ${ids}${frameInfo}.${missingInfo}${rateInfo}`);
   } catch (error) {
     showStatus(`Import failed: ${error.message}`, true);
