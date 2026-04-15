@@ -112,7 +112,8 @@ function normalizeEntries(rawEntries, targetDate, timeZone) {
       importTitle: entry.description || "",
       importRateSelection: resolveRateSelection(entry.tags),
       importDateValue: formatForTargetInput(entry.start, timeZone)
-    }));
+    }))
+    .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
 }
 
 function getEntryKey(entry) {
@@ -357,10 +358,29 @@ function renderEntries(entries) {
     const titleText = document.createElement("span");
     titleText.textContent = entry.description;
 
-    title.append(importDot, titleText);
+    const titleLeft = document.createElement("span");
+    titleLeft.className = "entry-title-left";
+    titleLeft.append(importDot, titleText);
+
+    const infoButton = document.createElement("button");
+    infoButton.type = "button";
+    infoButton.className = "tiny secondary info-toggle";
+    infoButton.textContent = "i";
+    infoButton.setAttribute("aria-label", "Toggle entry details");
+    infoButton.setAttribute("aria-expanded", "false");
+    infoButton.addEventListener("click", () => {
+      const isHidden = meta.classList.toggle("hidden-meta");
+      infoButton.setAttribute("aria-expanded", String(!isHidden));
+      infoButton.classList.toggle("active", !isHidden);
+    });
+
+    title.append(titleLeft, infoButton);
 
     const project = document.createElement("p");
     project.className = "entry-project";
+
+    const projectLeft = document.createElement("span");
+    projectLeft.className = "project-left";
 
     const swatch = document.createElement("span");
     swatch.className = "project-swatch";
@@ -368,18 +388,15 @@ function renderEntries(entries) {
       swatch.style.backgroundColor = entry.projectColor;
     }
 
+    const projectLabel = entry.projectName || (entry.projectId ? `Project ${entry.projectId}` : "No Project");
     const projectText = document.createElement("span");
-    projectText.textContent = entry.projectName || (entry.projectId ? `Project ${entry.projectId}` : "No Project");
-
-    project.append(swatch, projectText);
-
-    const meta = document.createElement("p");
-    meta.className = "entry-meta";
-    meta.textContent = formatEntryLine(entry);
+    projectText.className = "project-text";
+    projectText.textContent = projectLabel;
+    projectText.title = projectLabel;
 
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "secondary";
+    button.className = "secondary tiny";
     button.textContent = `Import ${entry.importDateValue}`;
     button.addEventListener("click", () => {
       const entryKey = getEntryKey(entry);
@@ -391,7 +408,15 @@ function renderEntries(entries) {
       importEntryToActiveTab(entry);
     });
 
-    li.append(title, project, meta, button);
+    projectLeft.append(swatch, projectText);
+    project.append(projectLeft, button);
+
+    const meta = document.createElement("p");
+    meta.className = "entry-meta";
+    meta.textContent = formatEntryLine(entry);
+    meta.classList.add("hidden-meta");
+
+    li.append(title, project, meta);
     ui.entries.appendChild(li);
   }
 }
