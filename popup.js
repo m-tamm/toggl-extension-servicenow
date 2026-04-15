@@ -42,6 +42,7 @@ const ui = {
   apiToken: document.getElementById("api-token"),
   saveToken: document.getElementById("save-token"),
   clearToken: document.getElementById("clear-token"),
+  showTokenForm: document.getElementById("show-token-form"),
   targetDate: document.getElementById("target-date"),
   fetchEntries: document.getElementById("fetch-entries"),
   clearCache: document.getElementById("clear-cache"),
@@ -219,8 +220,15 @@ function renderEntries(entries) {
 }
 
 function setAuthedUI(isAuthed) {
+  ui.tokenSection.classList.toggle("hidden", isAuthed);
   ui.dataSection.classList.toggle("hidden", !isAuthed);
+  ui.showTokenForm.classList.toggle("hidden", !isAuthed);
   ui.apiToken.value = "";
+}
+
+function revealTokenForm() {
+  ui.tokenSection.classList.remove("hidden");
+  ui.apiToken.focus();
 }
 
 async function saveToken() {
@@ -571,6 +579,11 @@ ui.clearCache.addEventListener("click", () => {
       showStatus("Cache cleared.");
     })
     .catch((error) => showStatus(error.message, true));
+});
+
+ui.showTokenForm.addEventListener("click", () => {
+  revealTokenForm();
+  showStatus("You can update your API token below.");
 });
 
 hydrate().catch((error) => showStatus(error.message, true));

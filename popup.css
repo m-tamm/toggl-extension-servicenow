@@ -36,6 +36,17 @@ h2 {
   font-size: 14px;
 }
 
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.section-head h2 {
+  margin: 0;
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--line);
@@ -78,6 +89,11 @@ button.danger {
 
 button.secondary {
   background: #334155;
+}
+
+button.tiny {
+  font-size: 11px;
+  padding: 4px 7px;
 }
 
 button:disabled {
