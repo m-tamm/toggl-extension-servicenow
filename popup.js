@@ -112,6 +112,83 @@ function normalizeEntries(rawEntries, targetDate, timeZone) {
     }));
 }
 
+function normalizeEntriesWithProjects(rawEntries, targetDate, timeZone, projectMap) {
+  return normalizeEntries(rawEntries, targetDate, timeZone).map((entry) => {
+    const projectMeta = entry.projectId ? projectMap.get(String(entry.projectId)) : null;
+    return {
+      ...entry,
+      projectName: projectMeta?.name || null,
+      projectColor: projectMeta?.color || null
+    };
+  });
+}
+
+function resolveProjectColor(project) {
+  const raw = project?.hex_color || project?.color_hex || project?.color || null;
+  if (typeof raw !== "string") return null;
+
+  const value = raw.trim();
+  if (!value) return null;
+  if (/^#[0-9a-fA-F]{6}$/.test(value)) return value;
+  if (/^[0-9a-fA-F]{6}$/.test(value)) return `#${value}`;
+  return null;
+}
+
+function collectWorkspaceIds(entries) {
+  const ids = new Set();
+  for (const entry of entries) {
+    const workspaceId = entry.workspace_id ?? entry.wid ?? null;
+    if (workspaceId !== null && workspaceId !== undefined) {
+      ids.add(String(workspaceId));
+    }
+  }
+  return Array.from(ids);
+}
+
+async function fetchProjectsForEntries(token, rawEntries) {
+  const projectMap = new Map();
+  const workspaceIds = collectWorkspaceIds(rawEntries);
+
+  if (!workspaceIds.length) {
+    return projectMap;
+  }
+
+  const auth = btoa(`${token}:api_token`);
+
+  await Promise.all(
+    workspaceIds.map(async (workspaceId) => {
+      const url = new URL(`https://api.track.toggl.com/api/v9/workspaces/${workspaceId}/projects`);
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Basic ${auth}`,
+          "Content-Type": "application/json"
+        }
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const projects = await response.json();
+      if (!Array.isArray(projects)) {
+        return;
+      }
+
+      for (const project of projects) {
+        if (!project || project.id === undefined || project.id === null) {
+          continue;
+        }
+        projectMap.set(String(project.id), {
+          name: project.name || null,
+          color: resolveProjectColor(project)
+        });
+      }
+    })
+  );
+
+  return projectMap;
+}
+
 function resolveRateSelection(rawTags) {
   const tags = (Array.isArray(rawTags) ? rawTags : [])
     .filter((t) => typeof t === "string")
@@ -160,7 +237,7 @@ function durationToParts(durationSeconds, startIso, stopIso) {
 
 function formatEntryLine(entry) {
   const stop = entry.stop || "running";
-  const project = entry.projectId ? `project:${entry.projectId}` : "project:-";
+  const project = entry.projectName || (entry.projectId ? `project:${entry.projectId}` : "project:-");
   const tags = entry.tags?.length ? ` | tags:${entry.tags.join(",")}` : "";
   return `${entry.start} -> ${stop} | ${entry.duration}s | ${project}${tags}`;
 }
@@ -204,6 +281,20 @@ function renderEntries(entries) {
     title.className = "entry-title";
     title.textContent = entry.description;
 
+    const project = document.createElement("p");
+    project.className = "entry-project";
+
+    const swatch = document.createElement("span");
+    swatch.className = "project-swatch";
+    if (entry.projectColor) {
+      swatch.style.backgroundColor = entry.projectColor;
+    }
+
+    const projectText = document.createElement("span");
+    projectText.textContent = entry.projectName || (entry.projectId ? `Project ${entry.projectId}` : "No Project");
+
+    project.append(swatch, projectText);
+
     const meta = document.createElement("p");
     meta.className = "entry-meta";
     meta.textContent = formatEntryLine(entry);
@@ -214,7 +305,7 @@ function renderEntries(entries) {
     button.textContent = `Import ${entry.importDateValue}`;
     button.addEventListener("click", () => importEntryToActiveTab(entry));
 
-    li.append(title, meta, button);
+    li.append(title, project, meta, button);
     ui.entries.appendChild(li);
   }
 }
@@ -299,7 +390,8 @@ async function fetchEntriesForDate() {
   }
 
   const rawEntries = await response.json();
-  const entries = normalizeEntries(rawEntries, targetDate, timezone);
+  const projectMap = await fetchProjectsForEntries(token, rawEntries);
+  const entries = normalizeEntriesWithProjects(rawEntries, targetDate, timezone, projectMap);
 
   const newCache = {
     date: targetDate,
