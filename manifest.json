@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Toggl Day Import Helper",
   "description": "Fetch Toggl entries for a day and import a selected entry date into the current page. (Built for ServiceNow)",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "permissions": ["storage", "activeTab", "scripting"],
   "host_permissions": ["https://api.track.toggl.com/*"],
   "action": {
