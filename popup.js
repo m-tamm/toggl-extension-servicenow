@@ -1,40 +1,8 @@
-const STORAGE_KEYS = {
-  token: "togglApiToken",
-  cache: "togglDayCache"
-};
-
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const DEFAULT_IMPORT_INPUT_ID = "task_time_worked.u_from";
-const TARGET_IFRAME_ID = "gsft_main";
-const DURATION_HOURS_INPUT_ID = "ni.task_time_worked.time_workeddur_hour";
-const DURATION_MINUTES_INPUT_ID = "ni.task_time_worked.time_workeddur_min";
-const DURATION_SECONDS_INPUT_ID = "ni.task_time_worked.time_workeddur_sec";
-const EXTERNAL_NOTE_TEXTAREA_ID = "task_time_worked.u_time_booking_external_note";
-const RATE_TYPE_SELECT_ID = "sys_select.task_time_worked.rate_type";
-const RATE_CATEGORY_SELECT_ID = "task_time_worked.u_rate_type_category";
-
-const RATE_TYPE_VALUES = {
-  administrative: "43007796db2c41108e647806f4961932",
-  businessSolution: "40407b96db2c41108e647806f496192b"
-};
-
-const RATE_CATEGORY_VALUES = {
-  administrative: "administrative Tätigkeiten",
-  trainingColleagues: "Ausbildung",
-  meetings: "Fachspezifische Meetings",
-  learning: "Weiterbildung",
-  businessSolution: "Business Solution"
-};
-
-// Example mapping: short Toggl tags -> ServiceNow category.
-const TAG_TO_CATEGORY = {
-  admin: RATE_CATEGORY_VALUES.administrative,
-  train: RATE_CATEGORY_VALUES.trainingColleagues,
-  meet: RATE_CATEGORY_VALUES.meetings,
-  learn: RATE_CATEGORY_VALUES.learning,
-  code: RATE_CATEGORY_VALUES.businessSolution,
-  dev: RATE_CATEGORY_VALUES.businessSolution
-};
+import { TimeEntryService } from "./app/time-entry-service.js";
+import { TogglProvider } from "./adapters/toggl-provider.js";
+import { SERVICENOW_TARGET, STORAGE_KEYS } from "./config.js";
+import { durationToParts, formatEntryLine, getEntryKey, resolveRateSelection } from "./domain/time-entry.js";
+import { clearCache, getStorage, isCacheValid, setStorage } from "./storage/chrome-storage.js";
 
 const ui = {
   tokenSection: document.getElementById("token-section"),
@@ -58,233 +26,8 @@ function showStatus(message, isError = false) {
   ui.status.classList.toggle("error", isError);
 }
 
-function toIsoDateInTimezone(isoDateTime, timeZone) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(new Date(isoDateTime));
-
-  const get = (type) => parts.find((p) => p.type === type)?.value;
-  return `${get("year")}-${get("month")}-${get("day")}`;
-}
-
-function toUtcIsoBoundary(dateStr, dayOffset, endOfDay = false) {
-  const d = new Date(`${dateStr}T00:00:00.000Z`);
-  d.setUTCDate(d.getUTCDate() + dayOffset);
-  if (endOfDay) {
-    d.setUTCHours(23, 59, 59, 999);
-  }
-  return d.toISOString();
-}
-
-function formatForTargetInput(isoDateTime, timeZone) {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone,
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-    hourCycle: "h23"
-  }).formatToParts(new Date(isoDateTime));
-
-  const get = (type) => parts.find((p) => p.type === type)?.value;
-  return `${get("day")}/${get("month")}/${get("year")} ${get("hour")}:${get("minute")}:${get("second")}`;
-}
-
-function normalizeEntries(rawEntries, targetDate, timeZone) {
-  return rawEntries
-    .filter((entry) => entry.start && toIsoDateInTimezone(entry.start, timeZone) === targetDate)
-    .map((entry) => ({
-      id: entry.id,
-      description: entry.description || "(no description)",
-      start: entry.start,
-      stop: entry.stop,
-      duration: entry.duration,
-      tags: Array.isArray(entry.tags) ? entry.tags : [],
-      projectId: entry.project_id || null,
-      imported: false,
-      importDuration: durationToParts(entry.duration, entry.start, entry.stop),
-      importTitle: entry.description || "",
-      importRateSelection: resolveRateSelection(entry.tags),
-      importDateValue: formatForTargetInput(entry.start, timeZone)
-    }))
-    .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
-}
-
-function getEntryKey(entry) {
-  if (entry?.id !== undefined && entry?.id !== null) {
-    return `id:${entry.id}`;
-  }
-  return `fallback:${entry?.start || ""}:${entry?.description || ""}:${entry?.duration || ""}`;
-}
-
-function preserveImportedFlags(newEntries, oldEntries) {
-  const importedKeys = new Set(
-    (oldEntries || [])
-      .filter((entry) => Boolean(entry?.imported))
-      .map((entry) => getEntryKey(entry))
-  );
-
-  return newEntries.map((entry) => ({
-    ...entry,
-    imported: importedKeys.has(getEntryKey(entry))
-  }));
-}
-
-function normalizeEntriesWithProjects(rawEntries, targetDate, timeZone, projectMap) {
-  return normalizeEntries(rawEntries, targetDate, timeZone).map((entry) => {
-    const projectMeta = entry.projectId ? projectMap.get(String(entry.projectId)) : null;
-    return {
-      ...entry,
-      projectName: projectMeta?.name || null,
-      projectColor: projectMeta?.color || null
-    };
-  });
-}
-
-function resolveProjectColor(project) {
-  const raw = project?.hex_color || project?.color_hex || project?.color || null;
-  if (typeof raw !== "string") return null;
-
-  const value = raw.trim();
-  if (!value) return null;
-  if (/^#[0-9a-fA-F]{6}$/.test(value)) return value;
-  if (/^[0-9a-fA-F]{6}$/.test(value)) return `#${value}`;
-  return null;
-}
-
-function collectWorkspaceIds(entries) {
-  const ids = new Set();
-  for (const entry of entries) {
-    const workspaceId = entry.workspace_id ?? entry.wid ?? null;
-    if (workspaceId !== null && workspaceId !== undefined) {
-      ids.add(String(workspaceId));
-    }
-  }
-  return Array.from(ids);
-}
-
-async function fetchProjectsForEntries(token, rawEntries) {
-  const projectMap = new Map();
-  const workspaceIds = collectWorkspaceIds(rawEntries);
-
-  if (!workspaceIds.length) {
-    return projectMap;
-  }
-
-  const auth = btoa(`${token}:api_token`);
-
-  await Promise.all(
-    workspaceIds.map(async (workspaceId) => {
-      const url = new URL(`https://api.track.toggl.com/api/v9/workspaces/${workspaceId}/projects`);
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Basic ${auth}`,
-          "Content-Type": "application/json"
-        }
-      });
-
-      if (!response.ok) {
-        return;
-      }
-
-      const projects = await response.json();
-      if (!Array.isArray(projects)) {
-        return;
-      }
-
-      for (const project of projects) {
-        if (!project || project.id === undefined || project.id === null) {
-          continue;
-        }
-        projectMap.set(String(project.id), {
-          name: project.name || null,
-          color: resolveProjectColor(project)
-        });
-      }
-    })
-  );
-
-  return projectMap;
-}
-
-function resolveRateSelection(rawTags) {
-  const tags = (Array.isArray(rawTags) ? rawTags : [])
-    .filter((t) => typeof t === "string")
-    .map((t) => t.trim().toLowerCase())
-    .filter(Boolean);
-
-  for (const tag of tags) {
-    const categoryValue = TAG_TO_CATEGORY[tag];
-    if (!categoryValue) continue;
-
-    const rateTypeValue =
-      categoryValue === RATE_CATEGORY_VALUES.businessSolution
-        ? RATE_TYPE_VALUES.businessSolution
-        : RATE_TYPE_VALUES.administrative;
-
-    return {
-      matchedTag: tag,
-      rateTypeValue,
-      categoryValue
-    };
-  }
-
-  return null;
-}
-
-function durationToParts(durationSeconds, startIso, stopIso) {
-  let totalSeconds = Number.isFinite(durationSeconds) ? durationSeconds : 0;
-
-  // Running Toggl entries can have negative duration; in that case derive from start->stop when possible.
-  if (totalSeconds < 0 && startIso && stopIso) {
-    const diff = Math.floor((new Date(stopIso).getTime() - new Date(startIso).getTime()) / 1000);
-    totalSeconds = Number.isFinite(diff) ? diff : 0;
-  }
-
-  totalSeconds = Math.max(0, Math.floor(totalSeconds));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  return {
-    hours: String(hours),
-    minutes: String(minutes),
-    seconds: String(seconds)
-  };
-}
-
-function formatEntryLine(entry) {
-  const stop = entry.stop || "running";
-  const project = entry.projectName || (entry.projectId ? `project:${entry.projectId}` : "project:-");
-  const tags = entry.tags?.length ? ` | tags:${entry.tags.join(",")}` : "";
-  return `${entry.start} -> ${stop} | ${entry.duration}s | ${project}${tags}`;
-}
-
-function isCacheValid(cache) {
-  if (!cache || !cache.fetchedAt || !cache.date || !Array.isArray(cache.entries)) {
-    return false;
-  }
-  const age = Date.now() - cache.fetchedAt;
-  return age >= 0 && age <= CACHE_TTL_MS;
-}
-
-async function getStorage(keys) {
-  return chrome.storage.local.get(keys);
-}
-
-async function setStorage(values) {
-  return chrome.storage.local.set(values);
-}
-
-async function clearCache() {
-  await chrome.storage.local.remove(STORAGE_KEYS.cache);
-}
+const provider = new TogglProvider();
+const timeEntryService = new TimeEntryService(provider);
 
 function setEntryImportedInCurrentList(entryToMark) {
   const keyToMark = getEntryKey(entryToMark);
@@ -477,35 +220,20 @@ async function fetchEntriesForDate() {
   }
 
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  const startDate = toUtcIsoBoundary(targetDate, -1, false);
-  const endDate = toUtcIsoBoundary(targetDate, 1, true);
+  showStatus(provider.getFetchStatusMessage());
 
-  const url = new URL("https://api.track.toggl.com/api/v9/me/time_entries");
-  url.searchParams.set("start_date", startDate);
-  url.searchParams.set("end_date", endDate);
-
-  const auth = btoa(`${token}:api_token`);
-  showStatus("Fetching entries from Toggl...");
-
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Basic ${auth}`,
-      "Content-Type": "application/json"
-    }
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    showStatus(`Toggl request failed (${response.status}): ${text.slice(0, 140)}`, true);
+  let entries;
+  try {
+    entries = await timeEntryService.fetchNormalizedEntries({
+      token,
+      targetDate,
+      timezone,
+      previousEntries: cache && cache.date === targetDate ? cache.entries : []
+    });
+  } catch (error) {
+    showStatus(error.message || "Request failed.", true);
     return;
   }
-
-  const rawEntries = await response.json();
-  const projectMap = await fetchProjectsForEntries(token, rawEntries);
-  const normalizedEntries = normalizeEntriesWithProjects(rawEntries, targetDate, timezone, projectMap);
-  const entries = cache && cache.date === targetDate
-    ? preserveImportedFlags(normalizedEntries, cache.entries)
-    : normalizedEntries;
 
   const newCache = {
     date: targetDate,
@@ -697,16 +425,16 @@ async function importEntryToActiveTab(entry) {
       },
       args: [
         entry.importDateValue,
-        DEFAULT_IMPORT_INPUT_ID,
-        TARGET_IFRAME_ID,
-        DURATION_HOURS_INPUT_ID,
-        DURATION_MINUTES_INPUT_ID,
-        DURATION_SECONDS_INPUT_ID,
-        EXTERNAL_NOTE_TEXTAREA_ID,
+        SERVICENOW_TARGET.importInputId,
+        SERVICENOW_TARGET.targetIframeId,
+        SERVICENOW_TARGET.durationHoursInputId,
+        SERVICENOW_TARGET.durationMinutesInputId,
+        SERVICENOW_TARGET.durationSecondsInputId,
+        SERVICENOW_TARGET.externalNoteTextareaId,
         safeDuration,
         safeTitle,
-        RATE_TYPE_SELECT_ID,
-        RATE_CATEGORY_SELECT_ID,
+        SERVICENOW_TARGET.rateTypeSelectId,
+        SERVICENOW_TARGET.rateCategorySelectId,
         safeRateSelection
       ]
     });
@@ -718,7 +446,7 @@ async function importEntryToActiveTab(entry) {
       return;
     }
 
-    const ids = success.result.writtenIds?.join(", ") || DEFAULT_IMPORT_INPUT_ID;
+    const ids = success.result.writtenIds?.join(", ") || SERVICENOW_TARGET.importInputId;
     const frameInfo = success.result.frame ? ` (frame: ${success.result.frame})` : "";
     const missingInfo =
       success.result.missingIds?.length > 0
