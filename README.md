@@ -57,3 +57,18 @@ Change this to your real internal field id once known.
 ```bash
 TOGGL_API_TOKEN=your_token_here node toggl-day-test.mjs 2026-04-13
 ```
+
+## 5) Changelog And Release Automation
+- Workflow file: `.github/workflows/changelog-release.yml`
+- Uses: `googleapis/release-please-action`
+- Trigger: push to `main`
+- Behavior:
+	- Parses Conventional Commits and opens/updates a release PR.
+	- Updates `CHANGELOG.md` in that release PR.
+	- Bumps versions in `manifest.json` and `release-please-manifest.json`.
+	- Creates GitHub release + tag `v<version>` when the release PR is merged.
+
+Release Please config files:
+
+- `.release-please-config.json`
+- `release-please-manifest.json`
