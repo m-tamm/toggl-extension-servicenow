@@ -1,6 +1,13 @@
 export const STORAGE_KEYS = {
-  token: "togglApiToken",
-  cache: "togglDayCache"
+  togglToken: "togglApiToken",
+  togglCache: "togglDayCache",
+  superProductivityCache: "superProductivityDayCache",
+  activeProvider: "activeTrackerProvider"
+};
+
+export const TRACKER_PROVIDER = {
+  toggl: "toggl",
+  superProductivity: "super-productivity"
 };
 
 export const CACHE_TTL_MS = 24 * 60 * 60 * 1000;

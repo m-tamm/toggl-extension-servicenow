@@ -8,8 +8,8 @@ export async function setStorage(values) {
   return chrome.storage.local.set(values);
 }
 
-export async function clearCache() {
-  await chrome.storage.local.remove(STORAGE_KEYS.cache);
+export async function clearCache(cacheKey = STORAGE_KEYS.togglCache) {
+  await chrome.storage.local.remove(cacheKey);
 }
 
 export function isCacheValid(cache) {

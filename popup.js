@@ -1,11 +1,20 @@
 import { TimeEntryService } from "./app/time-entry-service.js";
+import { SuperProductivityProvider } from "./adapters/super-productivity-provider.js";
 import { TogglProvider } from "./adapters/toggl-provider.js";
-import { SERVICENOW_TARGET, STORAGE_KEYS } from "./config.js";
+import { SERVICENOW_TARGET, STORAGE_KEYS, TRACKER_PROVIDER } from "./config.js";
 import { durationToParts, formatEntryLine, getEntryKey, resolveRateSelection } from "./domain/time-entry.js";
 import { clearCache, getStorage, isCacheValid, setStorage } from "./storage/chrome-storage.js";
 
 const ui = {
+  openSettings: document.getElementById("open-settings"),
+  settingsSection: document.getElementById("settings-section"),
+  trackerSelect: document.getElementById("tracker-select"),
+  saveSettings: document.getElementById("save-settings"),
+  closeSettings: document.getElementById("close-settings"),
+  activeTrackerIndicator: document.getElementById("active-tracker-indicator"),
   tokenSection: document.getElementById("token-section"),
+  setupTitle: document.getElementById("setup-title"),
+  apiTokenLabel: document.getElementById("api-token-label"),
   dataSection: document.getElementById("data-section"),
   apiToken: document.getElementById("api-token"),
   saveToken: document.getElementById("save-token"),
@@ -26,8 +35,42 @@ function showStatus(message, isError = false) {
   ui.status.classList.toggle("error", isError);
 }
 
-const provider = new TogglProvider();
-const timeEntryService = new TimeEntryService(provider);
+const providers = {
+  [TRACKER_PROVIDER.toggl]: new TogglProvider(),
+  [TRACKER_PROVIDER.superProductivity]: new SuperProductivityProvider()
+};
+
+const timeEntryServices = {
+  [TRACKER_PROVIDER.toggl]: new TimeEntryService(providers[TRACKER_PROVIDER.toggl]),
+  [TRACKER_PROVIDER.superProductivity]: new TimeEntryService(providers[TRACKER_PROVIDER.superProductivity])
+};
+
+const providerMeta = {
+  [TRACKER_PROVIDER.toggl]: {
+    label: "Toggl",
+    requiresToken: true,
+    tokenKey: STORAGE_KEYS.togglToken,
+    cacheKey: STORAGE_KEYS.togglCache,
+    tokenLabel: "Toggl API Token",
+    tokenPlaceholder: "Paste token",
+    saveButtonText: "Save Token",
+    clearButtonText: "Clear Token",
+    setupTitle: "Toggl Access"
+  },
+  [TRACKER_PROVIDER.superProductivity]: {
+    label: "Super Productivity",
+    requiresToken: false,
+    tokenKey: null,
+    cacheKey: STORAGE_KEYS.superProductivityCache,
+    tokenLabel: "",
+    tokenPlaceholder: "",
+    saveButtonText: "Continue",
+    clearButtonText: "Clear",
+    setupTitle: "Super Productivity Access"
+  }
+};
+
+let activeProviderId = TRACKER_PROVIDER.toggl;
 
 function setEntryImportedInCurrentList(entryToMark) {
   const keyToMark = getEntryKey(entryToMark);
@@ -44,7 +87,8 @@ function setEntryImportedInCurrentList(entryToMark) {
 }
 
 async function markImportedInCacheByKey(keyToMark) {
-  const { [STORAGE_KEYS.cache]: cache } = await getStorage([STORAGE_KEYS.cache]);
+  const cacheKey = providerMeta[activeProviderId].cacheKey;
+  const { [cacheKey]: cache } = await getStorage([cacheKey]);
   if (!cache || !Array.isArray(cache.entries)) {
     return;
   }
@@ -69,7 +113,7 @@ async function markImportedInCacheByKey(keyToMark) {
   }
 
   await setStorage({
-    [STORAGE_KEYS.cache]: {
+    [cacheKey]: {
       ...cache,
       entries: updatedEntries
     }
@@ -165,47 +209,151 @@ function renderEntries(entries) {
 }
 
 function setAuthedUI(isAuthed) {
+  const meta = getActiveProviderMeta();
   ui.tokenSection.classList.toggle("hidden", isAuthed);
   ui.dataSection.classList.toggle("hidden", !isAuthed);
-  ui.showTokenForm.classList.toggle("hidden", !isAuthed);
+  ui.showTokenForm.classList.toggle("hidden", !isAuthed || !meta.requiresToken);
   ui.apiToken.value = "";
 }
 
+function getActiveProviderMeta() {
+  return providerMeta[activeProviderId];
+}
+
+function getActiveProvider() {
+  return providers[activeProviderId];
+}
+
+function getActiveTimeEntryService() {
+  return timeEntryServices[activeProviderId];
+}
+
+function applyProviderVisualState() {
+  const meta = getActiveProviderMeta();
+  ui.activeTrackerIndicator.textContent = `Active tracker: ${meta.label}`;
+  ui.fetchEntries.textContent = `Fetch From ${meta.label}`;
+  ui.setupTitle.textContent = meta.setupTitle;
+  ui.trackerSelect.value = activeProviderId;
+
+  if (meta.requiresToken) {
+    ui.apiTokenLabel.textContent = meta.tokenLabel;
+    ui.apiToken.placeholder = meta.tokenPlaceholder;
+    ui.saveToken.textContent = meta.saveButtonText;
+    ui.clearToken.textContent = meta.clearButtonText;
+    ui.showTokenForm.textContent = "Change Access";
+    ui.apiTokenLabel.classList.remove("hidden");
+    ui.apiToken.classList.remove("hidden");
+    ui.saveToken.classList.remove("hidden");
+    ui.clearToken.classList.remove("hidden");
+  } else {
+    ui.apiTokenLabel.classList.add("hidden");
+    ui.apiToken.classList.add("hidden");
+    ui.saveToken.classList.add("hidden");
+    ui.clearToken.classList.add("hidden");
+    ui.showTokenForm.classList.add("hidden");
+  }
+}
+
+function getAuthSuccessStatus() {
+  const meta = getActiveProviderMeta();
+  if (!meta.requiresToken) {
+    return `${meta.label} selected.`;
+  }
+  return `${meta.label} token saved.`;
+}
+
+async function getCurrentProviderAuthAndCache() {
+  const meta = getActiveProviderMeta();
+  const keys = [meta.cacheKey];
+  if (meta.tokenKey) {
+    keys.push(meta.tokenKey);
+  }
+
+  const values = await getStorage(keys);
+  return {
+    token: meta.tokenKey ? values[meta.tokenKey] : null,
+    cache: values[meta.cacheKey] || null
+  };
+}
+
+async function applyProviderAuthState() {
+  const meta = getActiveProviderMeta();
+  const { token, cache } = await getCurrentProviderAuthAndCache();
+  const isAuthed = meta.requiresToken ? Boolean(token) : true;
+
+  setAuthedUI(isAuthed);
+
+  if (!isAuthed) {
+    renderEntries([]);
+    ui.cacheInfo.textContent = "";
+    showStatus(`Enter your ${meta.label} token to get started.`);
+    return;
+  }
+
+  if (!isCacheValid(cache)) {
+    if (cache) {
+      await clearCache(meta.cacheKey);
+    }
+    renderEntries([]);
+    ui.cacheInfo.textContent = "No valid cached day yet. Fetch a date.";
+    showStatus(`${meta.label} selected. Choose a date and fetch entries.`);
+    return;
+  }
+
+  ui.targetDate.value = cache.date;
+  renderEntries(cache.entries);
+  ui.cacheInfo.textContent = `Loaded cached entries for ${cache.date}.`;
+  showStatus(`Loaded ${meta.label} entries from local cache.`);
+}
+
 function revealTokenForm() {
+  if (!getActiveProviderMeta().requiresToken) {
+    return;
+  }
   ui.tokenSection.classList.remove("hidden");
   ui.apiToken.focus();
 }
 
 async function saveToken() {
-  const token = ui.apiToken.value.trim();
-  if (!token) {
-    showStatus("Please provide a Toggl API token.", true);
+  const meta = getActiveProviderMeta();
+  if (!meta.requiresToken || !meta.tokenKey) {
+    setAuthedUI(true);
+    showStatus(getAuthSuccessStatus());
     return;
   }
 
-  await setStorage({ [STORAGE_KEYS.token]: token });
+  const token = ui.apiToken.value.trim();
+  if (!token) {
+    showStatus(`Please provide a ${meta.label} API token.`, true);
+    return;
+  }
+
+  await setStorage({ [meta.tokenKey]: token });
   setAuthedUI(true);
-  showStatus("API token saved.");
+  showStatus(getAuthSuccessStatus());
 }
 
 async function removeToken() {
-  await chrome.storage.local.remove(STORAGE_KEYS.token);
-  await clearCache();
+  const meta = getActiveProviderMeta();
+  if (meta.tokenKey) {
+    await chrome.storage.local.remove(meta.tokenKey);
+  }
+  await clearCache(meta.cacheKey);
   setAuthedUI(false);
   ui.entries.innerHTML = "";
   ui.cacheInfo.textContent = "";
-  showStatus("Token and cached entries cleared.");
+  showStatus(`${meta.label} access and cached entries cleared.`);
 }
 
 async function fetchEntriesForDate() {
-  const { [STORAGE_KEYS.token]: token, [STORAGE_KEYS.cache]: cache } = await getStorage([
-    STORAGE_KEYS.token,
-    STORAGE_KEYS.cache
-  ]);
+  const meta = getActiveProviderMeta();
+  const provider = getActiveProvider();
+  const timeEntryService = getActiveTimeEntryService();
+  const { token, cache } = await getCurrentProviderAuthAndCache();
 
-  if (!token) {
+  if (meta.requiresToken && !token) {
     setAuthedUI(false);
-    showStatus("Please save your API token first.", true);
+    showStatus(`Please save your ${meta.label} API token first.`, true);
     return;
   }
 
@@ -216,7 +364,7 @@ async function fetchEntriesForDate() {
   }
 
   if (cache && cache.date !== targetDate) {
-    await clearCache();
+    await clearCache(meta.cacheKey);
   }
 
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -242,7 +390,7 @@ async function fetchEntriesForDate() {
     entries
   };
 
-  await setStorage({ [STORAGE_KEYS.cache]: newCache });
+  await setStorage({ [meta.cacheKey]: newCache });
   renderEntries(entries);
   ui.cacheInfo.textContent = `Stored ${entries.length} entries for ${targetDate}.`;
   showStatus("Entries fetched and cached.");
@@ -466,32 +614,27 @@ async function hydrate() {
   const today = new Date().toISOString().slice(0, 10);
   ui.targetDate.value = today;
 
-  const { [STORAGE_KEYS.token]: token, [STORAGE_KEYS.cache]: cache } = await getStorage([
-    STORAGE_KEYS.token,
-    STORAGE_KEYS.cache
-  ]);
+  const { [STORAGE_KEYS.activeProvider]: storedProvider } = await getStorage([STORAGE_KEYS.activeProvider]);
+  if (storedProvider && providerMeta[storedProvider]) {
+    activeProviderId = storedProvider;
+  }
 
-  setAuthedUI(Boolean(token));
+  applyProviderVisualState();
+  await applyProviderAuthState();
+}
 
-  if (!token) {
-    showStatus("Enter your Toggl API token to get started.");
+async function saveSettings() {
+  const selected = ui.trackerSelect.value;
+  if (!providerMeta[selected]) {
+    showStatus("Unknown tracker selected.", true);
     return;
   }
 
-  if (!isCacheValid(cache)) {
-    if (cache) {
-      await clearCache();
-    }
-    renderEntries([]);
-    ui.cacheInfo.textContent = "No valid cached day yet. Fetch a date.";
-    showStatus("Token found. Choose a date and fetch entries.");
-    return;
-  }
-
-  ui.targetDate.value = cache.date;
-  renderEntries(cache.entries);
-  ui.cacheInfo.textContent = `Loaded cached entries for ${cache.date}.`;
-  showStatus("Loaded entries from local cache.");
+  activeProviderId = selected;
+  await setStorage({ [STORAGE_KEYS.activeProvider]: selected });
+  applyProviderVisualState();
+  await applyProviderAuthState();
+  showStatus(`Switched tracker to ${providerMeta[selected].label}.`);
 }
 
 ui.saveToken.addEventListener("click", () => {
@@ -507,7 +650,8 @@ ui.fetchEntries.addEventListener("click", () => {
 });
 
 ui.clearCache.addEventListener("click", () => {
-  clearCache()
+  const cacheKey = getActiveProviderMeta().cacheKey;
+  clearCache(cacheKey)
     .then(() => {
       renderEntries([]);
       ui.cacheInfo.textContent = "Cached day cleared.";
@@ -518,7 +662,19 @@ ui.clearCache.addEventListener("click", () => {
 
 ui.showTokenForm.addEventListener("click", () => {
   revealTokenForm();
-  showStatus("You can update your API token below.");
+  showStatus("You can update access settings below.");
+});
+
+ui.openSettings.addEventListener("click", () => {
+  ui.settingsSection.classList.toggle("hidden");
+});
+
+ui.closeSettings.addEventListener("click", () => {
+  ui.settingsSection.classList.add("hidden");
+});
+
+ui.saveSettings.addEventListener("click", () => {
+  saveSettings().catch((error) => showStatus(error.message, true));
 });
 
 hydrate().catch((error) => showStatus(error.message, true));

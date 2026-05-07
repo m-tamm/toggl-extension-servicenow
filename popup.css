@@ -26,9 +26,24 @@ body {
   padding: 12px;
 }
 
+.top-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
 h1 {
   margin: 0 0 4px;
   font-size: 16px;
+}
+
+.active-tracker {
+  margin: 0;
+  font-size: 11px;
+  color: #0f5132;
+  font-weight: 600;
 }
 
 h2 {
@@ -67,6 +82,15 @@ input {
   border-radius: 8px;
   padding: 7px 8px;
   margin-bottom: 8px;
+}
+
+select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 8px;
+  margin-bottom: 8px;
+  background: #fff;
 }
 
 .row {

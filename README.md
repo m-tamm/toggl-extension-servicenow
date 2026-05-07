@@ -1,9 +1,9 @@
-# Toggl Chromium Extension Prototype
+# Tracker Chromium Extension Prototype
 
 This repo now contains:
 
 - a quick CLI test script (`toggl-day-test.mjs`)
-- a Manifest V3 browser extension that stores a Toggl API token, fetches entries for a date, caches one day locally, and imports a selected entry date into the active page.
+- a Manifest V3 browser extension that supports Toggl and Super Productivity, fetches entries for a date, caches one day locally per provider, and imports a selected entry date into the active page.
 
 ## Architecture (Refactor Baseline)
 
@@ -19,6 +19,11 @@ The extension was refactored to a provider-ready architecture while keeping curr
 
 This structure is intentionally prepared for adding more providers (for example Super Productivity local REST) without rewriting UI/business logic.
 
+Current providers:
+
+- Toggl (`https://api.track.toggl.com`)
+- Super Productivity local REST (`http://127.0.0.1:3876`)
+
 ## 1) Load the extension in Chromium
 1. Open `chrome://extensions` (or the equivalent in your Chromium-based browser).
 2. Enable **Developer mode**.
@@ -27,22 +32,31 @@ This structure is intentionally prepared for adding more providers (for example 
 
 
 ## 2) Extension behavior
-1. First startup (or when no token exists):
+1. First startup:
+	- You can choose the active tracker via **Settings** in the popup.
+	- The active tracker is shown as a visual indicator below the title.
+
+2. Toggl selected and no token exists:
 	- You see a token input and **Save Token** button.
 	- Toggl API-Token can be found at https://track.toggl.com/profile (bottom of profile page)
 
-2. After token is saved:
-	- You see a date input and **Fetch From Toggl** button.
+3. Toggl token saved, or Super Productivity selected:
+	- You see a date input and a **Fetch From ...** button for the selected tracker.
 
-3. After fetch:
+4. After fetch:
 	- Entries are stored in extension local storage for one day (`24h` TTL).
 	- The popup lists stored entries below the date input.
 
-4. Refetch behavior:
+5. Refetch behavior:
 	- If selected date differs from cached date, old cache is cleared before writing new data.
 	- If cache is older than 24h, it is considered outdated and removed.
+	- Cache is tracked per provider, so switching provider does not overwrite the other provider's cache.
 
-5. Import behavior:
+6. Provider switching behavior:
+	- Switching from Toggl to Super Productivity does **not** delete the stored Toggl token.
+	- Only the active provider fetch logic changes.
+
+7. Import behavior:
 	- The import is built for the `Book Time` page in ServiceNow
 	- Each list item has an import button.
 	- Import writes the selected entry start datetime into the target input field in the currently active page.

@@ -8,11 +8,30 @@
   </head>
   <body>
     <main class="container">
-      <h1>Toggl Import</h1>
+      <div class="top-bar">
+        <div>
+          <h1>Tracker Import</h1>
+          <p id="active-tracker-indicator" class="active-tracker"></p>
+        </div>
+        <button id="open-settings" type="button" class="tiny secondary">Settings</button>
+      </div>
+
+      <section id="settings-section" class="card hidden">
+        <h2>Tracker Settings</h2>
+        <label for="tracker-select">Tracker Provider</label>
+        <select id="tracker-select">
+          <option value="toggl">Toggl</option>
+          <option value="super-productivity">Super Productivity</option>
+        </select>
+        <div class="row">
+          <button id="save-settings" type="button">Save Settings</button>
+          <button id="close-settings" type="button" class="tiny secondary">Close</button>
+        </div>
+      </section>
 
       <section id="token-section" class="card">
-        <h2>Setup</h2>
-        <label for="api-token">Toggl API Token</label>
+        <h2 id="setup-title">Setup</h2>
+        <label for="api-token" id="api-token-label">Toggl API Token</label>
         <input id="api-token" type="password" placeholder="Paste token" autocomplete="off" />
         <div class="row">
           <button id="save-token" type="button">Save Token</button>
@@ -23,12 +42,12 @@
       <section id="data-section" class="card hidden">
         <div class="section-head">
           <h2>Fetch Entries</h2>
-          <button id="show-token-form" type="button" class="tiny secondary">Change Token</button>
+          <button id="show-token-form" type="button" class="tiny secondary">Change Access</button>
         </div>
         <label for="target-date">Date</label>
         <input id="target-date" type="date" />
         <div class="row">
-          <button id="fetch-entries" type="button">Fetch From Toggl</button>
+          <button id="fetch-entries" type="button">Fetch Entries</button>
           <button id="clear-cache" type="button">Clear Cached Day</button>
         </div>
 
