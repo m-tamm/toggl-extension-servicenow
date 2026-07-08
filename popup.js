@@ -513,6 +513,11 @@ async function importEntryToActiveTab(entry) {
         ];
 
         for (const [id, value] of durationFieldMap) {
+          // Avoid writing "0" hours: this can trigger ServiceNow recalculation from start/end dates.
+          if (id === hoursId && String(value ?? "").trim() === "0") {
+            continue;
+          }
+
           const field = document.getElementById(id);
           if (!field || !(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)) {
             missingIds.push(id);
