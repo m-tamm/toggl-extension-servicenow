@@ -7,6 +7,15 @@ function normalizeDateInput(targetDate) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
 }
 
+function normalizeHexColor(input) {
+  if (typeof input !== "string") return null;
+  const value = input.trim();
+  if (!value) return null;
+  if (/^#[0-9a-fA-F]{6}$/.test(value)) return value;
+  if (/^[0-9a-fA-F]{6}$/.test(value)) return `#${value}`;
+  return null;
+}
+
 function normalizeEntry(raw) {
   if (!raw || typeof raw !== "object") {
     return null;
@@ -35,7 +44,8 @@ function normalizeEntry(raw) {
       : null,
     project_name: typeof raw.project_name === "string" && raw.project_name.trim()
       ? raw.project_name
-      : null
+      : null,
+    project_color: normalizeHexColor(raw.project_color)
   };
 }
 
@@ -121,14 +131,21 @@ export class SuperProductivityProvider {
       }
 
       const projectId = String(entry.project_id);
-      if (projectMap.has(projectId)) {
+      const existing = projectMap.get(projectId);
+      if (!existing) {
+        projectMap.set(projectId, {
+          name: entry.project_name || null,
+          color: entry.project_color || null
+        });
         continue;
       }
 
-      projectMap.set(projectId, {
-        name: entry.project_name || null,
-        color: null
-      });
+      if (!existing.name && entry.project_name) {
+        existing.name = entry.project_name;
+      }
+      if (!existing.color && entry.project_color) {
+        existing.color = entry.project_color;
+      }
     }
 
     return projectMap;
