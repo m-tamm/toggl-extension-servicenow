@@ -71,12 +71,19 @@ Implemented example mapping in `popup.js`:
 
 - `admin` -> rate type `administrative`, category `administrative Tätigkeiten`
 - `train` -> rate type `administrative`, category `Ausbildung`
+- `ausbildung` -> rate type `administrative`, category `Ausbildung`
 - `meet` -> rate type `administrative`, category `Fachspezifische Meetings`
+- `internes meeting` -> rate type `administrative`, category `Fachspezifische Meetings`
 - `learn` -> rate type `administrative`, category `Weiterbildung`
+- `fortbildung` -> rate type `administrative`, category `Weiterbildung`
+- `presales` -> rate type `2490bb96db2c41108e647806f4961990`, category `Presales`
+- `kunden/projekttermin` -> rate type `business solution`, category `Business Solution` (fallback when no supported subtags are present)
+- `b-solution` -> rate type `business solution`, category `Business Solution`
+- `abrechenbar` -> rate type `bf507b96db2c41108e647806f496192f`, category `abrechnen`
 - `code` -> rate type `business solution`, category `Business Solution`
 - `dev` -> rate type `business solution`, category `Business Solution`
 
-If multiple tags are present, the first matching tag wins.
+If multiple tags are present, the first matching tag wins. Comma-separated tag strings are also supported. Tags also match when spaces are replaced by `-` (example: `internes-meeting`).
 
 Change this to your real internal field id once known.
 

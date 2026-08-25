@@ -1,20 +1,55 @@
 import { RATE_CATEGORY_VALUES, RATE_TYPE_VALUES, TAG_TO_CATEGORY } from "../config.js";
 import { formatForTargetInput, toIsoDateInTimezone } from "../lib/date-time.js";
 
+function resolveCategoryForTag(tag) {
+  const directMatch = TAG_TO_CATEGORY[tag];
+  if (directMatch) {
+    return directMatch;
+  }
+
+  // Some providers may replace spaces in tags with hyphens.
+  const withSpaces = tag.replace(/-/g, " ");
+  return TAG_TO_CATEGORY[withSpaces] || null;
+}
+
 export function resolveRateSelection(rawTags) {
   const tags = (Array.isArray(rawTags) ? rawTags : [])
     .filter((t) => typeof t === "string")
+    .flatMap((t) => t.split(","))
     .map((t) => t.trim().toLowerCase())
     .filter(Boolean);
 
+  const hasKundenProjekttermin = tags.includes("kunden/projekttermin");
+  if (hasKundenProjekttermin) {
+    // Subtags override the parent tag mapping when both are present.
+    const subTagOverride = tags.find((tag) => tag === "abrechenbar" || tag === "b-solution");
+    if (subTagOverride) {
+      const categoryValue = resolveCategoryForTag(subTagOverride);
+      if (categoryValue) {
+        return {
+          matchedTag: subTagOverride,
+          rateTypeValue:
+            categoryValue === RATE_CATEGORY_VALUES.billable
+              ? RATE_TYPE_VALUES.billable
+              : RATE_TYPE_VALUES.businessSolution,
+          categoryValue
+        };
+      }
+    }
+  }
+
   for (const tag of tags) {
-    const categoryValue = TAG_TO_CATEGORY[tag];
+    const categoryValue = resolveCategoryForTag(tag);
     if (!categoryValue) continue;
 
-    const rateTypeValue =
-      categoryValue === RATE_CATEGORY_VALUES.businessSolution
-        ? RATE_TYPE_VALUES.businessSolution
-        : RATE_TYPE_VALUES.administrative;
+    let rateTypeValue = RATE_TYPE_VALUES.administrative;
+    if (categoryValue === RATE_CATEGORY_VALUES.businessSolution) {
+      rateTypeValue = RATE_TYPE_VALUES.businessSolution;
+    } else if (categoryValue === RATE_CATEGORY_VALUES.presales) {
+      rateTypeValue = RATE_TYPE_VALUES.presales;
+    } else if (categoryValue === RATE_CATEGORY_VALUES.billable) {
+      rateTypeValue = RATE_TYPE_VALUES.billable;
+    }
 
     return {
       matchedTag: tag,

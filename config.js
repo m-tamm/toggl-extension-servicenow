@@ -25,7 +25,9 @@ export const SERVICENOW_TARGET = {
 
 export const RATE_TYPE_VALUES = {
   administrative: "43007796db2c41108e647806f4961932",
-  businessSolution: "40407b96db2c41108e647806f496192b"
+  businessSolution: "40407b96db2c41108e647806f496192b",
+  presales: "2490bb96db2c41108e647806f4961990",
+  billable: "bf507b96db2c41108e647806f496192f"
 };
 
 export const RATE_CATEGORY_VALUES = {
@@ -33,15 +35,24 @@ export const RATE_CATEGORY_VALUES = {
   trainingColleagues: "Ausbildung",
   meetings: "Fachspezifische Meetings",
   learning: "Weiterbildung",
-  businessSolution: "Business Solution"
+  businessSolution: "Business Solution",
+  presales: "Presales",
+  billable: "abrechnen"
 };
 
 // Business mapping: first matching tag determines the ServiceNow rate selection.
 export const TAG_TO_CATEGORY = {
   admin: RATE_CATEGORY_VALUES.administrative,
   train: RATE_CATEGORY_VALUES.trainingColleagues,
+  ausbildung: RATE_CATEGORY_VALUES.trainingColleagues,
   meet: RATE_CATEGORY_VALUES.meetings,
+  "internes meeting": RATE_CATEGORY_VALUES.meetings,
   learn: RATE_CATEGORY_VALUES.learning,
+  fortbildung: RATE_CATEGORY_VALUES.learning,
+  presales: RATE_CATEGORY_VALUES.presales,
+  "kunden/projekttermin": RATE_CATEGORY_VALUES.businessSolution,
+  "b-solution": RATE_CATEGORY_VALUES.businessSolution,
+  abrechenbar: RATE_CATEGORY_VALUES.billable,
   code: RATE_CATEGORY_VALUES.businessSolution,
   dev: RATE_CATEGORY_VALUES.businessSolution
 };
