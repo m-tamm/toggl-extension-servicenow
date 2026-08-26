@@ -62,7 +62,7 @@ export class SuperProductivityProvider {
     return "Fetching entries from Super Productivity...";
   }
 
-  async _fetchJson(path, query = null) {
+  async _fetchJson(path, query = null, token = null) {
     const url = new URL(path, `${this.baseUrl}/`);
     if (query) {
       for (const [key, value] of Object.entries(query)) {
@@ -70,7 +70,10 @@ export class SuperProductivityProvider {
       }
     }
 
-    const response = await fetch(url);
+    const headers = {
+      Authorization: `Bearer ${token}`
+    };
+    const response = await fetch(url, { headers });
     const text = await response.text();
 
     let payload = null;
@@ -103,7 +106,11 @@ export class SuperProductivityProvider {
     return payload;
   }
 
-  async fetchRawEntries({ targetDate }) {
+  async fetchRawEntries({ token, targetDate }) {
+    if (!token || typeof token !== "string" || !token.trim()) {
+      throw new Error("Super Productivity API token is required.");
+    }
+
     const safeDate = normalizeDateInput(targetDate);
     if (!safeDate) {
       throw new Error("Invalid target date format. Expected YYYY-MM-DD.");
@@ -113,7 +120,7 @@ export class SuperProductivityProvider {
       date: safeDate,
       includeOpen: "false",
       limit: "2000"
-    });
+    }, token.trim());
 
     if (!Array.isArray(data)) {
       return [];

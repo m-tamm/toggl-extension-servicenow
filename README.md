@@ -40,8 +40,13 @@ Current providers:
 	- You see a token input and **Save Token** button.
 	- Toggl API-Token can be found at https://track.toggl.com/profile (bottom of profile page)
 
-3. Toggl token saved, or Super Productivity selected:
+3. Token saved for selected provider:
 	- You see a date input and a **Fetch From ...** button for the selected tracker.
+
+Super Productivity token:
+	- Enable Local REST API in Super Productivity settings.
+	- Copy the access token from **Settings -> Misc -> Access Token**.
+	- The extension sends it as `Authorization: Bearer <token>`.
 
 4. After fetch:
 	- Entries are stored in extension local storage for one day (`24h` TTL).

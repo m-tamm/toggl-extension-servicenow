@@ -59,13 +59,13 @@ const providerMeta = {
   },
   [TRACKER_PROVIDER.superProductivity]: {
     label: "Super Productivity",
-    requiresToken: false,
-    tokenKey: null,
+    requiresToken: true,
+    tokenKey: STORAGE_KEYS.superProductivityToken,
     cacheKey: STORAGE_KEYS.superProductivityCache,
-    tokenLabel: "",
-    tokenPlaceholder: "",
-    saveButtonText: "Continue",
-    clearButtonText: "Clear",
+    tokenLabel: "Super Productivity API Token",
+    tokenPlaceholder: "Paste access token",
+    saveButtonText: "Save Token",
+    clearButtonText: "Clear Token",
     setupTitle: "Super Productivity Access"
   }
 };

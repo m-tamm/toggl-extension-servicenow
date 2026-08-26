@@ -1,5 +1,6 @@
 export const STORAGE_KEYS = {
   togglToken: "togglApiToken",
+  superProductivityToken: "superProductivityApiToken",
   togglCache: "togglDayCache",
   superProductivityCache: "superProductivityDayCache",
   activeProvider: "activeTrackerProvider"
